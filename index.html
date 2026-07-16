@@ -1,0 +1,1829 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>빠른채점</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Nanum+Myeongjo:wght@400;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<style>
+  :root{
+    --paper: #f1ebda;
+    --paper-dark: #e5ddc4;
+    --ink: #221f1a;
+    --ink-soft: #55503f;
+    --red: #b3261e;
+    --red-deep: #7d1a15;
+    --line: #c9bfa0;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background: linear-gradient(180deg,#d8cfaf, #c4b98f);
+    font-family: 'Nanum Myeongjo', serif;
+    color: var(--ink);
+    display:flex;
+    justify-content:center;
+    min-height:100vh;
+  }
+  #app{
+    width:100%;
+    max-width:460px;
+    min-height:100vh;
+    background:var(--paper);
+    box-shadow: 0 0 40px rgba(0,0,0,0.35);
+    display:flex;
+    flex-direction:column;
+  }
+
+  header{
+    padding:18px 20px 14px;
+    border-bottom:2px solid var(--ink);
+  }
+  .eyebrow{
+    font-family:'Space Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.14em;
+    color:var(--ink-soft);
+  }
+  h1{
+    font-family:'Black Han Sans', sans-serif;
+    font-size:30px;
+    margin:6px 0 2px;
+    color:var(--red-deep);
+  }
+  .subtitle{ font-size:13px; color:var(--ink-soft); }
+
+  main{ flex:1; padding:18px 18px 40px; }
+
+  .step{
+    border:1.5px solid var(--ink);
+    background:var(--paper-dark);
+    padding:16px;
+    margin-bottom:16px;
+    position:relative;
+  }
+  .step.disabled{ opacity:0.45; pointer-events:none; }
+  .step-title{
+    font-family:'Space Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.08em;
+    color:var(--red-deep);
+    margin-bottom:10px;
+  }
+
+  .field-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-bottom:10px;
+  }
+  .field-row label{ font-size:13px; color:var(--ink-soft); flex-shrink:0; }
+  .field-row input[type="number"]{
+    width:70px;
+    border:none;
+    border-bottom:2px dotted var(--ink-soft);
+    background:transparent;
+    font-family:'Space Mono', monospace;
+    font-size:14px;
+    padding:6px 2px;
+    color:var(--ink);
+  }
+
+  .photo-input-wrap{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .photo-btn{
+    font-family:'Nanum Myeongjo', serif;
+    font-weight:700;
+    font-size:14px;
+    background:var(--ink);
+    color:var(--paper);
+    border:none;
+    padding:12px;
+    cursor:pointer;
+    text-align:center;
+  }
+  .photo-btn:active{ background:var(--red-deep); }
+  .photo-btn.secondary{ background:var(--ink-soft); }
+  .photo-btn.secondary:active{ background:var(--ink); }
+
+  #photoPreview{
+    max-width:100%;
+    border:1px solid var(--line);
+    display:none;
+  }
+  #photoPreview.show{ display:block; }
+
+  .ocr-status{
+    font-family:'Space Mono', monospace;
+    font-size:12px;
+    color:var(--red-deep);
+    margin-top:8px;
+    display:none;
+  }
+  .ocr-status.show{ display:block; }
+  .progress-bar-wrap{
+    height:6px;
+    background:var(--line);
+    margin-top:6px;
+    display:none;
+  }
+  .progress-bar-wrap.show{ display:block; }
+  .progress-bar{ height:100%; background:var(--red-deep); width:0%; transition:width 0.2s; }
+
+  .answer-grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+    gap:8px;
+    margin-top:4px;
+  }
+  .answer-cell{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:3px;
+  }
+  .answer-cell .qnum{
+    font-family:'Space Mono', monospace;
+    font-size:10px;
+    color:var(--ink-soft);
+  }
+  .answer-cell input{
+    width:100%;
+    text-align:center;
+    border:1.5px solid var(--ink-soft);
+    background:var(--paper);
+    font-family:'Space Mono', monospace;
+    font-size:14px;
+    padding:6px 0;
+    color:var(--ink);
+  }
+  .answer-cell input:focus{ outline:none; border-color:var(--red); }
+  .answer-cell input:disabled{ opacity:0.55; background:var(--paper-dark); cursor:not-allowed; }
+  .answer-cell.key-cell input{ border-color:var(--red-deep); color:var(--red-deep); font-weight:700; }
+
+  .grade-btn{
+    width:100%;
+    font-family:'Black Han Sans', sans-serif;
+    font-size:18px;
+    background:var(--red-deep);
+    color:var(--paper);
+    border:none;
+    padding:14px;
+    cursor:pointer;
+    margin-top:6px;
+  }
+  .grade-btn:active{ background:var(--red); }
+
+  /* 결과 */
+  #resultBox{ display:none; }
+  #resultBox.show{ display:block; }
+  .result-summary{
+    text-align:center;
+    padding:10px 0 16px;
+  }
+  .result-score{
+    font-family:'Black Han Sans', sans-serif;
+    font-size:40px;
+    color:var(--red-deep);
+  }
+  .result-score span{ font-size:18px; color:var(--ink-soft); }
+  .result-sub{ font-family:'Space Mono', monospace; font-size:12px; color:var(--ink-soft); margin-top:4px; }
+
+  .result-grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+    gap:8px;
+  }
+  .result-cell{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:3px;
+    position:relative;
+  }
+  .result-cell .qnum{ font-family:'Space Mono', monospace; font-size:10px; color:var(--ink-soft); }
+  .result-cell .mark-box{
+    width:100%;
+    aspect-ratio:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:'Black Han Sans', sans-serif;
+    font-size:20px;
+    border:1.5px solid var(--line);
+    background:var(--paper);
+  }
+  .result-cell.correct .mark-box{ color:var(--red-deep); border-color:var(--red-deep); }
+  .result-cell.wrong .mark-box{ color:var(--red); border-color:var(--red); background:#fbeceb; }
+  .result-cell.ungraded .mark-box{ color:var(--ink-soft); border-color:var(--line); background:transparent; }
+
+  .wrong-list{
+    margin-top:16px;
+    font-family:'Space Mono', monospace;
+    font-size:13px;
+    color:var(--red-deep);
+    border-top:1px dashed var(--line);
+    padding-top:10px;
+    white-space:pre-line;
+  }
+
+  .hint{ font-size:11px; color:var(--ink-soft); line-height:1.5; margin-top:6px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="eyebrow">빠른채점 · 정답지 사진 인식</div>
+    <h1>채점기</h1>
+    <div class="subtitle">정답지 찍고, 내 답만 넣으면 끝</div>
+  </header>
+
+  <main>
+    <!-- 1단계: 과목 선택 -->
+    <div class="step" id="stepElective">
+      <div class="step-title">STEP 1 · 과목 선택</div>
+      <div class="field-row">
+        <label>내가 본 과목</label>
+        <select id="electiveSelect" onchange="onElectiveChange()" style="flex:1; font-family:'Nanum Myeongjo',serif; font-size:14px; padding:6px; background:var(--paper); border:1.5px solid var(--ink-soft);">
+          <option value="">선택 안 함 (과목명 표기 없음)</option>
+          <optgroup label="국어">
+            <option value="화법과 작문">화법과 작문</option>
+            <option value="언어와 매체">언어와 매체</option>
+          </optgroup>
+          <optgroup label="수학">
+            <option value="확률과 통계">확률과 통계</option>
+            <option value="미적분">미적분</option>
+            <option value="기하">기하</option>
+          </optgroup>
+          <optgroup label="영어/한국사">
+            <option value="영어">영어</option>
+            <option value="한국사">한국사</option>
+          </optgroup>
+          <optgroup label="사회탐구">
+            <option value="생활과 윤리">생활과 윤리</option>
+            <option value="윤리와 사상">윤리와 사상</option>
+            <option value="한국지리">한국지리</option>
+            <option value="세계지리">세계지리</option>
+            <option value="동아시아사">동아시아사</option>
+            <option value="세계사">세계사</option>
+            <option value="경제">경제</option>
+            <option value="정치와 법">정치와 법</option>
+            <option value="사회문화">사회·문화</option>
+          </optgroup>
+          <optgroup label="과학탐구">
+            <option value="물리학Ⅰ">물리학Ⅰ</option>
+            <option value="물리학Ⅱ">물리학Ⅱ</option>
+            <option value="화학Ⅰ">화학Ⅰ</option>
+            <option value="화학Ⅱ">화학Ⅱ</option>
+            <option value="생명과학Ⅰ">생명과학Ⅰ</option>
+            <option value="생명과학Ⅱ">생명과학Ⅱ</option>
+            <option value="지구과학Ⅰ">지구과학Ⅰ</option>
+            <option value="지구과학Ⅱ">지구과학Ⅱ</option>
+          </optgroup>
+          <option value="__custom__">목록에 없음 (직접 입력)</option>
+        </select>
+      </div>
+      <div class="field-row" id="customElectiveRow" style="display:none;">
+        <label>과목명 직접입력</label>
+        <input type="text" id="customElectiveInput" style="flex:1; border:none; border-bottom:2px dotted var(--ink-soft); background:transparent; font-family:'Nanum Myeongjo',serif; font-size:14px; padding:6px 2px;" placeholder="정답지에 적힌 과목명 그대로">
+      </div>
+      <div class="field-row" id="manualCountRow" style="display:none;">
+        <label>총 문항 수</label>
+        <input type="number" id="totalCount" min="1" max="50" value="20">
+      </div>
+      <div class="hint" id="autoCountHint"></div>
+      <button class="photo-btn" style="margin-top:10px;" onclick="confirmElective()">확정</button>
+    </div>
+
+    <!-- 2단계: 정답지 사진 -->
+    <div class="step disabled" id="stepPhoto">
+      <div class="step-title">STEP 2 · 정답지 사진 인식 (공통/선택 분리)</div>
+      <div class="photo-input-wrap">
+        
+        <!-- 공통과목 또는 전체 사진/PDF 올리기 -->
+        <input type="file" accept="image/*,application/pdf" id="photoInputCommon" style="display:none" onchange="onPhotoSelected(event, 'common')">
+        <button class="photo-btn" onclick="document.getElementById('photoInputCommon').click()">📷 [공통과목/전체] 정답지 사진·PDF 올리기</button>
+
+        <!-- 선택과목 사진 올리기 -->
+        <input type="file" accept="image/*" id="photoInputElective" style="display:none" onchange="onPhotoSelected(event, 'elective')">
+        <button class="photo-btn secondary" onclick="document.getElementById('photoInputElective').click()">📷 [선택과목] 내 과목 정답칸만 따로 찍어 올리기</button>
+
+        <!-- 격자 좌표 기반 칸별 인식 (표 형태 전용, 인식 실패 시 이걸로) -->
+        <!-- 서버(Google Vision OCR) 인식 -->
+        <input type="file" accept="image/*" id="photoInputVision" style="display:none" onchange="onPhotoSelected(event, 'vision')">
+        <button class="photo-btn secondary" onclick="document.getElementById('photoInputVision').click()">☁️ [서버 OCR] 정확하게 인식하기 (Google Vision)</button>
+        <div class="hint">브라우저 자체 인식 대신 서버(Google Vision OCR)로 인식해서 정확도가 훨씬 높아요.</div>
+
+        <input type="file" accept="image/*" id="photoInputGrid" style="display:none" onchange="onGridPhotoSelected(event)">
+        <button class="photo-btn secondary" onclick="document.getElementById('photoInputGrid').click()">🔲 격자 좌표 기반 칸별 인식 (표 형태 전용)</button>
+        <div class="hint">위 방식이 실패했다면 이걸 써보세요. 전체를 한번에 읽는 대신, 정답 칸 위치를 직접 짚어주면 그 칸 하나하나만 잘라서 인식해서 훨씬 정확해요.</div>
+
+        <!-- 가이드에 맞춰 촬영 (은행앱 카드촬영 방식) -->
+        <button class="photo-btn secondary" onclick="openGuideCamera()">📐 가이드에 맞춰 촬영하기</button>
+        <div class="hint">사진이 삐뚤어지거나 옆으로 찍히는 걸 방지하려면, 화면 가이드에 표를 맞춰서 바로 촬영하세요.</div>
+
+        <img id="photoPreview" alt="정답지 미리보기">
+        <div class="field-row" id="rotateControls" style="display:none; margin-top:6px;">
+          <button class="photo-btn secondary" style="flex:1; padding:8px;" onclick="rotatePendingPhoto()">↻ 90도 회전</button>
+          <button class="photo-btn" style="flex:1; padding:8px;" onclick="confirmPendingPhoto()">✓ 이 방향으로 인식 시작</button>
+        </div>
+        <div class="ocr-status" id="ocrStatus">인식 중...</div>
+        <div class="progress-bar-wrap" id="progressWrap"><div class="progress-bar" id="progressBar"></div></div>
+        
+        <div class="hint">선택과목 표기를 잘 못 읽는다면, 먼저 [공통]을 올리신 후 [선택과목] 버튼을 눌러 자신의 과목 표만 가깝게 찍어 올려주세요.</div>
+      </div>
+    </div>
+
+    <!-- 격자 보정(캘리브레이션) 단계 -->
+    <div class="step" id="stepGridCalib" style="display:none;">
+      <div class="step-title">STEP 2-B · 격자 위치 보정</div>
+
+      <div class="field-row">
+        <label>세로 한 줄(그룹)당 문항 수</label>
+        <input type="number" id="gridPerGroup" min="1" max="50" value="6">
+      </div>
+      <div class="hint">표에서 "번호·정답·배점"이 한 세트인 세로줄 하나에 문제가 몇 개씩 들어있는지 세어서 입력해주세요. (예: 22문항이 4줄로 나뉘어 6개씩 있으면 6)</div>
+
+      <div class="hint" id="gridInstruction" style="margin-top:10px; font-weight:700;">1번 문제의 "정답" 칸을 클릭해주세요.</div>
+      <div style="position:relative; max-width:100%; overflow:auto; border:1px solid var(--line); margin-top:8px;">
+        <canvas id="gridCanvas" style="display:block; max-width:100%; cursor:crosshair;"></canvas>
+      </div>
+      <div class="field-row" style="margin-top:10px;">
+        <button class="photo-btn secondary" style="flex:1;" onclick="rotateGridImage()">↻ 사진 회전 (90도)</button>
+        <button class="photo-btn secondary" style="flex:1;" onclick="resetGridCalibration()">다시 찍기</button>
+      </div>
+    </div>
+
+    <!-- 3단계: 정답 확인/수정 -->
+    <div class="step disabled" id="stepKey">
+      <div class="step-title">STEP 3 · 인식된 정답 확인 (틀리면 직접 수정)</div>
+      <div class="field-row">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="enableKeyEdit" onchange="toggleKeyEdit()">
+          정답 직접 확인/수정하기
+        </label>
+      </div>
+      <div class="hint">평소엔 잠겨있어요. 위 체크박스를 눌러야 수정할 수 있어요 (실수로 값이 바뀌는 걸 막기 위해서예요).</div>
+      <div class="answer-grid" id="keyGrid"></div>
+      <div class="field-row" style="margin-top:12px;">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="showRawText" onchange="toggleRawText()">
+          자동 인식이 이상할 때 - 원본 인식 텍스트 보기
+        </label>
+      </div>
+      <textarea id="rawTextBox" readonly style="display:none; width:100%; height:140px; margin-top:6px; font-family:'Space Mono',monospace; font-size:11px; padding:8px; border:1px solid var(--line); background:var(--paper); color:var(--ink-soft); box-sizing:border-box;"></textarea>
+    </div>
+
+    <!-- 4단계: 내 답안 입력 -->
+    <div class="step disabled" id="stepMine">
+      <div class="step-title">STEP 4 · 내가 고른 답 입력</div>
+      <div class="answer-grid" id="mineGrid"></div>
+      <button class="grade-btn" onclick="gradeNow()">채점하기</button>
+    </div>
+
+    <!-- 결과 -->
+    <div class="step" id="resultBox">
+      <div class="step-title">채점 결과</div>
+      <div class="result-summary">
+        <div class="result-score" id="resultScore">0<span> / 0</span></div>
+        <div class="result-sub" id="resultSub"></div>
+      </div>
+      <div class="result-grid" id="resultGrid"></div>
+      <div class="wrong-list" id="wrongList"></div>
+    </div>
+  </main>
+</div>
+
+<!-- 가이드에 맞춰 촬영하는 카메라 모달 -->
+<div id="guideCameraModal" style="display:none; position:fixed; inset:0; background:#000; z-index:9999; flex-direction:column;">
+  <video id="guideVideo" autoplay playsinline style="width:100%; height:100%; object-fit:cover; position:absolute; top:0; left:0;"></video>
+  <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none;">
+    <div style="width:82%; aspect-ratio:3/4; border:3px dashed #ff5555; border-radius:6px; box-shadow:0 0 0 2000px rgba(0,0,0,0.45);"></div>
+  </div>
+  <div style="position:absolute; top:16px; left:0; right:0; text-align:center; color:#fff; font-family:'Nanum Myeongjo',serif; font-size:14px; padding:0 20px;">
+    빨간 점선 안에 정답표가 똑바로, 꽉 차게 들어오도록 맞춰주세요
+  </div>
+  <div style="position:absolute; bottom:24px; left:0; right:0; display:flex; justify-content:center; gap:16px;">
+    <button onclick="closeGuideCamera()" style="padding:14px 20px; background:#444; color:#fff; border:none; border-radius:6px; font-family:'Nanum Myeongjo',serif;">취소</button>
+    <button onclick="captureGuidePhoto()" style="padding:14px 28px; background:var(--red-deep); color:#fff; border:none; border-radius:6px; font-family:'Black Han Sans',sans-serif; font-size:16px;">📸 촬영</button>
+  </div>
+</div>
+
+<script>
+/* ---------------- 서버(Google Vision OCR) 연동 설정 ----------------
+   Supabase Edge Function 배포 후, 아래 URL을 실제 값으로 채워넣으면 됨.
+   예: https://pumrlqbanuhyphvxsiko.supabase.co/functions/v1/vision-ocr-proxy
+   비워두면(placeholder 상태) 이 기능은 자동으로 비활성화됨. */
+const VISION_PROXY_URL = 'https://zeisfwdgnxungtjetnao.supabase.co/functions/v1/vision-ocr-proxy';
+/* Supabase Edge Function은 기본적으로 JWT 검증이 켜져 있어서, Authorization/apikey 헤더가
+   없으면 401(Missing authorization header)로 실패함 — 이게 "서버 인식 실패"의 흔한 원인.
+   함수 배포 시 --no-verify-jwt 옵션을 안 썼다면, 여기에 프로젝트의 anon key를 넣어주세요.
+   (Supabase 대시보드 > Project Settings > API > anon public key) */
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InplaXNmd2Rnbnh1bmd0amV0bmFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQxNDUxMTYsImV4cCI6MjA5OTcyMTExNn0.OsmO_bRU7zF_RAHaqm81OItQi0_3UErW8-wJSPAuzh0';
+
+function isVisionConfigured(){
+  return VISION_PROXY_URL.startsWith('http') && !VISION_PROXY_URL.includes('YOUR_PROJECT_REF');
+}
+
+/* 서버(Edge Function)로 보내기 전, 이미지를 적당한 해상도로 줄이고 JPEG로 압축.
+   원본을 그대로(특히 2배 스케일 PNG) 보내면 base64 payload가 너무 커져서
+   Edge Function 쪽 메모리/CPU 한도를 넘겨 죽는 경우(HTTP 546)가 있었음. */
+function prepareImageForServer(dataUrl, maxDim = 1600, quality = 0.85){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      let { width, height } = img;
+      if(Math.max(width, height) > maxDim){
+        const ratio = maxDim / Math.max(width, height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
+/* ---------------- 완전 미검출 문항: 좌표 기반 위치 추정 + 확대 이미지 ---------------- */
+let lastVisionWords = [];        // [{text, vertices:[{x,y}x4]}], 서버 이미지 기준 좌표
+let lastVisionImageDataUrl = null; // 좌표의 기준이 되는 이미지(서버로 보낸 압축본)
+
+function centerOfVertices(vertices){
+  if(!vertices || !vertices.length) return null;
+  const xs = vertices.map(v => v.x || 0);
+  const ys = vertices.map(v => v.y || 0);
+  return {
+    x: (Math.min(...xs) + Math.max(...xs)) / 2,
+    y: (Math.min(...ys) + Math.max(...ys)) / 2,
+  };
+}
+
+/* 이미 정상 인식된 문항들에서 "번호 토큰 위치 -> 정답 토큰 위치" 평균 이동벡터를 뽑아냄 */
+function buildNumberToAnswerOffset(){
+  const offsets = [];
+  Object.keys(recognizedKey).forEach(qStr=>{
+    const q = parseInt(qStr);
+    const ansText = recognizedKey[q];
+    const numTok = lastVisionWords.find(w => w.text && w.text.trim() === String(q));
+    if(!numTok) return;
+    const numCenter = centerOfVertices(numTok.vertices);
+    if(!numCenter) return;
+
+    let best = null, bestDist = Infinity;
+    lastVisionWords.forEach(w=>{
+      const wt = (w.text || '').trim();
+      if(normalizeAnswerChar(wt) !== String(ansText)) return;
+      const c = centerOfVertices(w.vertices);
+      if(!c) return;
+      const dx = c.x - numCenter.x, dy = c.y - numCenter.y;
+      const dist = Math.hypot(dx, dy);
+      if(dist < bestDist && dist < 250){ bestDist = dist; best = { dx, dy }; }
+    });
+    if(best) offsets.push(best);
+  });
+  if(!offsets.length) return null;
+  return {
+    dx: offsets.reduce((s,o)=>s+o.dx, 0) / offsets.length,
+    dy: offsets.reduce((s,o)=>s+o.dy, 0) / offsets.length,
+  };
+}
+
+async function detectAndShowGaps(){
+  if(!lastVisionWords.length || !lastVisionImageDataUrl) return;
+  const offset = buildNumberToAnswerOffset();
+  if(!offset) return; // 기준 삼을 만한 정상 인식 사례가 없으면 추정 불가
+
+  const img = await new Promise((resolve)=>{
+    const i = new Image();
+    i.onload = ()=> resolve(i);
+    i.src = lastVisionImageDataUrl;
+  });
+
+  const gapQuestions = [];
+  for(let q = 1; q <= TOTAL; q++){
+    if(recognizedKey[q]) continue; // 이미 정상 인식됨
+    const numTok = lastVisionWords.find(w => w.text && w.text.trim() === String(q));
+    if(!numTok) continue; // 번호 자체도 못 찾으면 추정할 기준점이 없음 -> 그냥 빈칸으로 둠
+    const numCenter = centerOfVertices(numTok.vertices);
+    if(!numCenter) continue;
+    gapQuestions.push({ q, cx: numCenter.x + offset.dx, cy: numCenter.y + offset.dy });
+  }
+  if(!gapQuestions.length) return;
+
+  for(const g of gapQuestions){
+    await showGapThumbnail(g.q, img, g.cx, g.cy);
+  }
+}
+
+/* 잘라낸 조각을 Vision 서버로 다시 보내서 재인식 (이미 이 사진에서 검증된 도구라 성공률이 더 높음) */
+async function recognizeCropViaVision(cropDataUrl){
+  try{
+    const base64 = cropDataUrl.split(',')[1];
+    const headers = { 'Content-Type': 'application/json' };
+    if(SUPABASE_ANON_KEY){
+      headers['Authorization'] = `Bearer ${SUPABASE_ANON_KEY}`;
+      headers['apikey'] = SUPABASE_ANON_KEY;
+    }
+    const res = await fetch(VISION_PROXY_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ imageBase64: base64, format: 'png' }),
+    });
+    if(!res.ok) return null;
+    const json = await res.json();
+    if(!json || json.error || !json.text) return null;
+    const cleaned = json.text.replace(/\s/g, '');
+    const m = cleaned.match(/[①②③④⑤⑥⑦⑧⑨]|\d{1,3}/);
+    return m ? normalizeAnswerChar(m[0]) : null;
+  }catch(e){
+    console.warn('조각 재인식 실패', e);
+    return null;
+  }
+}
+
+async function showGapThumbnail(q, img, cx, cy){
+  const half = 42; // 크롭 반경(px)
+  const cropX = Math.max(0, cx - half);
+  const cropY = Math.max(0, cy - half);
+  const cropW = Math.min(img.width - cropX, half * 2);
+  const cropH = Math.min(img.height - cropY, half * 2);
+  if(cropW <= 0 || cropH <= 0) return;
+
+  const canvas = document.createElement('canvas');
+  const scale = 4;
+  canvas.width = cropW * scale;
+  canvas.height = cropH * scale;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+  binarizeCanvas(ctx, canvas.width, canvas.height);
+  const cropDataUrl = canvas.toDataURL('image/png');
+
+  const targetInput = document.getElementById(`key_${q}`);
+  const wrapper = targetInput ? targetInput.closest('.answer-cell') : null;
+  if(!wrapper) return;
+
+  // 잘라낸 조각을 Vision 서버로 재인식 (이 사진에서 이미 검증된 도구를 재활용)
+  const reReadValue = await recognizeCropViaVision(cropDataUrl);
+
+  const label = document.createElement('div');
+  const thumb = document.createElement('img');
+  thumb.src = cropDataUrl;
+  thumb.style.cssText = 'width:100%; margin-top:2px; border:1.5px solid var(--red); display:block;';
+
+  if(reReadValue){
+    // 재인식 성공: 값 채워넣고, 그래도 눈으로 확인하라고 확대본은 같이 보여줌
+    recognizedKey[q] = reReadValue;
+    if(targetInput) targetInput.value = reReadValue;
+    label.style.cssText = 'font-size:9px; color:#2f6b2f; margin-top:2px;';
+    label.textContent = `재인식 성공(${reReadValue}) - 맞는지 확대본으로 확인해주세요`;
+  } else {
+    label.style.cssText = 'font-size:9px; color:var(--red-deep); margin-top:2px;';
+    label.textContent = '재인식도 실패 - 아래 확대본 보고 직접 입력';
+  }
+
+  wrapper.appendChild(label);
+  wrapper.appendChild(thumb);
+}
+
+async function recognizeViaVision(dataUrl){
+  const statusEl = document.getElementById('ocrStatus');
+  statusEl.classList.add('show');
+  statusEl.textContent = '서버로 보낼 이미지 준비 중...';
+
+  try{
+    // 용량을 줄여서 Edge Function이 처리할 수 있는 크기로 맞춤
+    const compactDataUrl = await prepareImageForServer(dataUrl);
+    lastVisionImageDataUrl = compactDataUrl; // 좌표는 이 이미지 기준이라 크롭할 때 이걸 써야 함
+    const base64 = compactDataUrl.split(',')[1]; // "data:image/jpeg;base64," 접두어 제거
+
+    statusEl.textContent = '서버(Google Vision)로 인식 중...';
+    const headers = { 'Content-Type': 'application/json' };
+    if(SUPABASE_ANON_KEY){
+      headers['Authorization'] = `Bearer ${SUPABASE_ANON_KEY}`;
+      headers['apikey'] = SUPABASE_ANON_KEY;
+    }
+
+    let res;
+    try{
+      res = await fetch(VISION_PROXY_URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ imageBase64: base64, format: 'jpeg' }),
+      });
+    }catch(networkErr){
+      // fetch 자체가 실패 = 네트워크 차단, CORS, 또는 잘못된 URL
+      statusEl.textContent = `서버 인식 실패: 서버에 연결하지 못했어요 (${networkErr.message}). 인터넷 연결/URL을 확인해주세요.`;
+      console.warn(networkErr);
+      return;
+    }
+
+    const rawBody = await res.text();
+    let json = null;
+    try{ json = rawBody ? JSON.parse(rawBody) : null; }catch(parseErr){ /* JSON이 아닌 응답 */ }
+
+    if(res.status === 546){
+      statusEl.textContent = '서버 인식 실패 (HTTP 546): 이미지가 너무 커서 서버 리소스가 부족했어요. 다시 시도하거나, 그래도 안 되면 사진을 더 작게 찍어주세요.';
+      console.warn('Vision proxy 546 (out of compute resources)', rawBody);
+      return;
+    }
+    if(!res.ok){
+      const detail = (json && (json.error || json.message)) || rawBody.slice(0, 200) || res.statusText;
+      statusEl.textContent = `서버 인식 실패 (HTTP ${res.status}): ${detail}`;
+      console.warn('Vision proxy error', res.status, rawBody);
+      return;
+    }
+    if(!json || json.error){
+      statusEl.textContent = `서버 인식 실패: ${(json && json.error) || '알 수 없는 응답 형식'}`;
+      console.warn('Vision proxy bad response', rawBody);
+      return;
+    }
+    if(!json.text){
+      statusEl.textContent = '서버 인식 실패: 응답에 인식된 텍스트가 없어요.';
+      console.warn('Vision proxy empty text', json);
+      return;
+    }
+
+    statusEl.textContent = '서버(Google Vision OCR) 인식 완료.';
+    lastVisionWords = json.words || [];
+    finishTextExtraction(json.text, 'pdf'); // 전체파싱+선택과목 덮어쓰기 로직 재사용
+    detectAndShowGaps(); // 완전 미검출 문항 위치 추정 후 확대 이미지로 보여주기
+  }catch(e){
+    statusEl.textContent = `서버 인식 실패: ${e.message || e}`;
+    console.warn(e);
+  }
+}
+
+window.addEventListener('error', function(e){
+  showOnScreenError(`${e.message}\n(${e.filename ? e.filename.split('/').pop() : ''}:${e.lineno || '?'})`);
+});
+window.addEventListener('unhandledrejection', function(e){
+  showOnScreenError(`Promise 에러: ${e.reason && e.reason.message ? e.reason.message : e.reason}`);
+});
+function showOnScreenError(msg){
+  try{
+    let box = document.getElementById('onScreenError');
+    if(!box){
+      box = document.createElement('div');
+      box.id = 'onScreenError';
+      box.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:40vh;overflow:auto;background:#2a0000;color:#ffd9d9;font-family:monospace;font-size:11px;padding:10px;z-index:99999;white-space:pre-wrap;border-top:3px solid red;';
+      document.body.appendChild(box);
+    }
+    const line = document.createElement('div');
+    line.style.cssText = 'border-bottom:1px dashed #663;padding:4px 0;';
+    line.textContent = `[에러] ${msg}`;
+    box.appendChild(line);
+  }catch(err){}
+}
+
+let TOTAL = 20;
+let recognizedKey = {};
+let recognizedPoints = {}; // 표 형식 인식 시 함께 읽은 문항별 배점 (원점수 계산용)
+
+/* ---------------- STEP 1 ---------------- */
+const SUBJECT_TOTAL_COUNT = {
+  '화법과 작문': 45, '언어와 매체': 45,
+  '확률과 통계': 30, '미적분': 30, '기하': 30,
+  '영어': 45, '한국사': 20,
+  '생활과 윤리': 20, '윤리와 사상': 20, '한국지리': 20, '세계지리': 20,
+  '동아시아사': 20, '세계사': 20, '경제': 20, '정치와 법': 20, '사회문화': 20,
+  '물리학Ⅰ': 20, '물리학Ⅱ': 20, '화학Ⅰ': 20, '화학Ⅱ': 20,
+  '생명과학Ⅰ': 20, '생명과학Ⅱ': 20, '지구과학Ⅰ': 20, '지구과학Ⅱ': 20,
+};
+
+function onElectiveChange(){
+  const val = document.getElementById('electiveSelect').value;
+  const customRow = document.getElementById('customElectiveRow');
+  const manualRow = document.getElementById('manualCountRow');
+  const hint = document.getElementById('autoCountHint');
+
+  customRow.style.display = (val === '__custom__') ? 'flex' : 'none';
+
+  if(val && val !== '__custom__' && SUBJECT_TOTAL_COUNT[val]){
+    manualRow.style.display = 'none';
+    hint.textContent = `"${val}" 기준으로 문항 수 ${SUBJECT_TOTAL_COUNT[val]}개로 자동 설정됩니다.`;
+  } else {
+    manualRow.style.display = 'flex';
+    hint.textContent = val === '__custom__'
+      ? '목록에 없는 과목이라 문항 수를 직접 입력해주세요.'
+      : '과목을 선택 안 하면 문항 수를 직접 입력해주세요.';
+  }
+}
+
+function confirmElective(){
+  const val = document.getElementById('electiveSelect').value;
+  if(val && val !== '__custom__' && SUBJECT_TOTAL_COUNT[val]){
+    TOTAL = SUBJECT_TOTAL_COUNT[val];
+  } else {
+    const manual = parseInt(document.getElementById('totalCount').value);
+    if(isNaN(manual) || manual < 1){ alert('문항 수를 정확히 입력해주세요.'); return; }
+    TOTAL = manual;
+  }
+  document.getElementById('stepPhoto').classList.remove('disabled');
+  document.getElementById('stepElective').classList.add('disabled');
+  saveState();
+}
+
+function getSelectedElectiveName(){
+  const val = document.getElementById('electiveSelect').value;
+  if(!val) return '';
+  if(val === '__custom__') return document.getElementById('customElectiveInput').value.trim();
+  return val;
+}
+
+const SUBJECT_ALIASES = {
+  '화법과 작문': ['화법과 작문', '화작'],
+  '언어와 매체': ['언어와 매체', '언매'],
+  '확률과 통계': ['확률과 통계', '확통'],
+  '미적분': ['미적분', '미적'],
+  '기하': ['기하'],
+  '생활과 윤리': ['생활과 윤리', '생윤'],
+  '윤리와 사상': ['윤리와 사상', '윤사'],
+  '한국지리': ['한국지리', '한지'],
+  '세계지리': ['세계지리', '세지'],
+  '동아시아사': ['동아시아사', '동아시아'],
+  '세계사': ['세계사'],
+  '경제': ['경제'],
+  '정치와 법': ['정치와 법', '정법'],
+  '사회문화': ['사회문화', '사회·문화', '사문'],
+  '물리학Ⅰ': ['물리학Ⅰ', '물리학1', '물리Ⅰ', '물리1'],
+  '물리학Ⅱ': ['물리학Ⅱ', '물리학2', '물리Ⅱ', '물리2'],
+  '화학Ⅰ': ['화학Ⅰ', '화학1'],
+  '화학Ⅱ': ['화학Ⅱ', '화학2'],
+  '생명과학Ⅰ': ['생명과학Ⅰ', '생명과학1', '생1'],
+  '생명과학Ⅱ': ['생명과학Ⅱ', '생명과학2', '생2'],
+  '지구과학Ⅰ': ['지구과학Ⅰ', '지구과학1', '지1'],
+  '지구과학Ⅱ': ['지구과학Ⅱ', '지구과학2', '지2'],
+};
+
+const ALL_ELECTIVE_ALIASES_FLAT = Object.values(SUBJECT_ALIASES).flat();
+function getAliasesFor(electiveName){ return SUBJECT_ALIASES[electiveName] || [electiveName]; }
+function normalizeForMatch(s){ return s.replace(/\s+/g, ''); }
+
+function buildNormalizedWithMap(text){
+  let norm = '';
+  const map = [];
+  for(let i=0; i<text.length; i++){
+    const ch = text[i];
+    if(/\s/.test(ch)) continue;
+    norm += ch;
+    map.push(i);
+  }
+  return { norm, map };
+}
+
+function scopeTextToElective(text, electiveName){
+  if(!electiveName) return null;
+  const { norm, map } = buildNormalizedWithMap(text);
+  const aliases = getAliasesFor(electiveName).map(normalizeForMatch).filter(Boolean);
+  if(!aliases.length) return null;
+
+  let startNormIdx = -1;
+  let matchedLen = 0;
+  aliases.forEach(a=>{
+    const idx = norm.indexOf(a);
+    if(idx !== -1 && (startNormIdx === -1 || idx < startNormIdx)){
+      startNormIdx = idx;
+      matchedLen = a.length;
+    }
+  });
+  if(startNormIdx === -1) return null;
+  const startOrigIdx = map[startNormIdx];
+
+  let endNormIdx = norm.length;
+  ALL_ELECTIVE_ALIASES_FLAT.forEach(name=>{
+    const n = normalizeForMatch(name);
+    if(!n || aliases.includes(n)) return;
+    const idx = norm.indexOf(n, startNormIdx + matchedLen);
+    if(idx !== -1 && idx < endNormIdx) endNormIdx = idx;
+  });
+  const endOrigIdx = endNormIdx < norm.length ? map[endNormIdx] : text.length;
+
+  return text.slice(startOrigIdx, endOrigIdx);
+}
+
+/* ---------------- STEP 2: OCR ---------------- */
+/* 사진을 흑백으로 바꾸고 명암 대비를 극대화(이진화) -> OCR 정확도 향상의 핵심 */
+/* 가로->세로 순서로 나눠 처리하는 분리형 박스블러 (도트무늬/스캔 잡음 제거용, 속도 확보) */
+function boxBlurGray(gray, width, height, radius){
+  const tmp = new Float32Array(gray.length);
+  const out = new Uint8ClampedArray(gray.length);
+
+  // 가로 방향
+  for(let y = 0; y < height; y++){
+    let sum = 0;
+    const rowStart = y * width;
+    for(let x = -radius; x <= radius; x++){
+      sum += gray[rowStart + Math.min(width-1, Math.max(0, x))];
+    }
+    for(let x = 0; x < width; x++){
+      tmp[rowStart + x] = sum / (radius*2 + 1);
+      const addX = Math.min(width-1, x + radius + 1);
+      const subX = Math.max(0, x - radius);
+      sum += gray[rowStart + addX] - gray[rowStart + subX];
+    }
+  }
+
+  // 세로 방향
+  for(let x = 0; x < width; x++){
+    let sum = 0;
+    for(let y = -radius; y <= radius; y++){
+      sum += tmp[Math.min(height-1, Math.max(0, y)) * width + x];
+    }
+    for(let y = 0; y < height; y++){
+      out[y*width + x] = sum / (radius*2 + 1);
+      const addY = Math.min(height-1, y + radius + 1);
+      const subY = Math.max(0, y - radius);
+      sum += tmp[addY*width + x] - tmp[subY*width + x];
+    }
+  }
+  return out;
+}
+
+/* 그림자·조명 불균형에 강한 "지역 적응형" 이진화 (Bradley-Roth 방식).
+   예전에는 이미지 전체에 임계값 하나(전역 Otsu)를 썼는데, 사진 일부에 그림자가 지면
+   그쪽 영역이 통째로 검정으로 뭉개져서 OCR이 아무것도 못 읽는 문제가 있었음.
+   각 픽셀을 "주변 지역의 평균 밝기"와 비교하면, 그림자 안에서도 글자와 배경의
+   상대적 명암 차이는 유지되므로 그림자째로 정상 분리됨. */
+function binarizeCanvas(ctx, width, height){
+  const imgData = ctx.getImageData(0, 0, width, height);
+  const data = imgData.data;
+  let gray = new Uint8ClampedArray(width * height);
+
+  // 1) 그레이스케일 변환
+  for(let i = 0; i < gray.length; i++){
+    const r = data[i*4], g = data[i*4+1], b = data[i*4+2];
+    gray[i] = 0.299*r + 0.587*g + 0.114*b;
+  }
+
+  // 2) 복사기 도트무늬/스캔 잡음 제거를 위한 살짝 블러 (글자 획은 굵어서 살아남고, 자잘한 점 잡음만 뭉개짐)
+  gray = boxBlurGray(gray, width, height, 2);
+
+  // 3) 지역 평균 계산 — 기존 분리형 박스블러를 큰 반경으로 재활용 (적분 이미지 없이 O(n))
+  const radius = Math.max(10, Math.round(Math.min(width, height) / 12));
+  const localMean = boxBlurGray(gray, width, height, radius);
+
+  // 4) 지역 평균보다 15% 이상 어두운 픽셀만 글자(검정)로 판정
+  const t = 0.15;
+  for(let i = 0; i < gray.length; i++){
+    const v = gray[i] <= localMean[i] * (1 - t) ? 0 : 255;
+    data[i*4] = v; data[i*4+1] = v; data[i*4+2] = v;
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+/* dataURL 이미지를 로드→이진화해서 새 dataURL로 반환 (원본 dataURL은 건드리지 않음) */
+function binarizeDataUrl(dataUrl){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      binarizeCanvas(ctx, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
+let pendingPhotoImg = null;
+let pendingPhotoType = null;
+let pendingPhotoRotation = 0; // 0, 90, 180, 270
+let pendingPhotoDataUrl = null;
+
+/* Promise가 timeoutMs 안에 안 끝나면 상태 메시지 띄우고 null 반환 (무한 대기 방지) */
+function withTimeout(promise, timeoutMs, timeoutMessage){
+  const statusEl = document.getElementById('ocrStatus');
+  return Promise.race([
+    promise.then(v => v),
+    new Promise(resolve => setTimeout(()=>{
+      statusEl.textContent = timeoutMessage;
+      resolve(null);
+    }, timeoutMs)),
+  ]);
+}
+
+/* ---------------- 격자 좌표 기반 칸별 인식 ---------------- */
+let gridImg = null;
+let gridCanvasScale = 1;
+let gridTaps = []; // 원본 이미지 좌표 기준 3개 클릭점
+
+/* ---------------- 가이드에 맞춰 촬영 (은행앱 카드촬영 방식) ---------------- */
+let guideStream = null;
+
+async function openGuideCamera(){
+  const modal = document.getElementById('guideCameraModal');
+  modal.style.display = 'flex';
+  try{
+    guideStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false,
+    });
+    document.getElementById('guideVideo').srcObject = guideStream;
+  }catch(e){
+    alert('카메라를 열 수 없어요. 카메라 권한을 허용했는지 확인해주세요.');
+    closeGuideCamera();
+  }
+}
+
+function closeGuideCamera(){
+  if(guideStream){
+    guideStream.getTracks().forEach(t => t.stop());
+    guideStream = null;
+  }
+  document.getElementById('guideCameraModal').style.display = 'none';
+}
+
+function captureGuidePhoto(){
+  const video = document.getElementById('guideVideo');
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if(!vw || !vh) return;
+
+  // 화면에 보이는 비디오는 object-fit:cover라 실제 프레임 중 가운데 영역만 잘라 사용
+  // 가이드 박스 비율(3:4, 화면 폭의 82%)에 맞춰 비디오 원본에서 대응 영역을 계산
+  const guideBoxRatio = 3/4; // width/height
+  let cropW, cropH;
+  if(vw / vh > guideBoxRatio){
+    cropH = vh;
+    cropW = vh * guideBoxRatio;
+  } else {
+    cropW = vw;
+    cropH = vw / guideBoxRatio;
+  }
+  const cropX = (vw - cropW) / 2;
+  const cropY = (vh - cropH) / 2;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = cropW;
+  canvas.height = cropH;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+  const dataUrl = canvas.toDataURL('image/png');
+  closeGuideCamera();
+
+  // 촬영된 이미지를 격자 좌표 찍기(칸별 인식) 흐름으로 바로 연결
+  const img = new Image();
+  img.onload = ()=>{
+    gridImg = img;
+    gridTaps = [];
+    setupGridCanvas();
+  };
+  img.src = dataUrl;
+}
+
+function onGridPhotoSelected(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      gridImg = img;
+      gridTaps = [];
+      setupGridCanvas();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function rotateGridImage(){
+  const oldImg = gridImg;
+  const canvas = document.createElement('canvas');
+  canvas.width = oldImg.height;
+  canvas.height = oldImg.width;
+  const ctx = canvas.getContext('2d');
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate(90 * Math.PI / 180);
+  ctx.drawImage(oldImg, -oldImg.width / 2, -oldImg.height / 2);
+
+  const newImg = new Image();
+  newImg.onload = ()=>{
+    gridImg = newImg;
+    gridTaps = [];
+    setupGridCanvas();
+  };
+  newImg.src = canvas.toDataURL('image/png');
+}
+
+function setupGridCanvas(){
+  document.getElementById('stepGridCalib').style.display = 'block';
+  document.getElementById('stepGridCalib').scrollIntoView({ behavior:'smooth' });
+  updateGridInstruction();
+
+  const canvas = document.getElementById('gridCanvas');
+  const maxDisplayWidth = Math.min(460, window.innerWidth - 40);
+  gridCanvasScale = maxDisplayWidth / gridImg.width;
+  canvas.width = gridImg.width * gridCanvasScale;
+  canvas.height = gridImg.height * gridCanvasScale;
+  redrawGridCanvas();
+
+  canvas.onclick = (e)=>{
+    const rect = canvas.getBoundingClientRect();
+    const displayX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const displayY = (e.clientY - rect.top) * (canvas.height / rect.height);
+    const origX = displayX / gridCanvasScale;
+    const origY = displayY / gridCanvasScale;
+    if(gridTaps.length < 3){
+      gridTaps.push({ x: origX, y: origY });
+      redrawGridCanvas();
+      updateGridInstruction();
+    }
+    if(gridTaps.length === 3){
+      setTimeout(runGridAnalysis, 200);
+    }
+  };
+}
+
+function updateGridInstruction(){
+  const msgs = [
+    '1번 문제의 "정답" 칸을 클릭해주세요.',
+    '바로 다음 문제(같은 세로줄, 예: 2번)의 "정답" 칸을 클릭해주세요.',
+    '옆 세로줄 그룹의 첫 문제 "정답" 칸을 클릭해주세요.',
+  ];
+  const el = document.getElementById('gridInstruction');
+  el.textContent = gridTaps.length < 3 ? msgs[gridTaps.length] : '분석 중...';
+}
+
+function redrawGridCanvas(){
+  const canvas = document.getElementById('gridCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(gridImg, 0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = 'red';
+  gridTaps.forEach(t=>{
+    ctx.beginPath();
+    ctx.arc(t.x * gridCanvasScale, t.y * gridCanvasScale, 5, 0, Math.PI*2);
+    ctx.fill();
+  });
+}
+
+function resetGridCalibration(){
+  gridTaps = [];
+  redrawGridCanvas();
+  updateGridInstruction();
+}
+
+async function runGridAnalysis(){
+  const statusEl = document.getElementById('ocrStatus');
+  statusEl.classList.add('show');
+  statusEl.textContent = '칸별 인식 준비 중...';
+
+  const perGroup = parseInt(document.getElementById('gridPerGroup').value) || TOTAL;
+  const [tap1, tap2, tap3] = gridTaps; // 1번 정답칸, 2번(같은줄 다음문제) 정답칸, 다음그룹 1번째 정답칸
+  const rowVec = { x: tap2.x - tap1.x, y: tap2.y - tap1.y };
+  const colVec = { x: tap3.x - tap1.x, y: tap3.y - tap1.y };
+
+  // 셀 크기 추정 (행간격의 절반 정도를 셀 반경으로)
+  const cellHalfW = Math.max(8, Math.hypot(colVec.x, colVec.y) * 0.28);
+  const cellHalfH = Math.max(8, Math.hypot(rowVec.x, rowVec.y) * 0.35);
+
+  // 원본 해상도 그대로 오프스크린 캔버스에 그려서 크롭에 사용
+  const fullCanvas = document.createElement('canvas');
+  fullCanvas.width = gridImg.width;
+  fullCanvas.height = gridImg.height;
+  const fullCtx = fullCanvas.getContext('2d');
+  fullCtx.drawImage(gridImg, 0, 0);
+  binarizeCanvas(fullCtx, fullCanvas.width, fullCanvas.height);
+
+  recognizedKey = {};
+  lastRawText = '(격자 좌표 기반 칸별 인식 결과)';
+
+  statusEl.textContent = '인식 엔진 준비 중... (첫 실행은 시간이 좀 걸려요)';
+  const worker = await withTimeout(
+    Tesseract.createWorker('eng', 1, {
+      logger: (m)=>{ if(m.status) statusEl.textContent = `인식 엔진 준비 중... (${m.status})`; }
+    }),
+    30000,
+    '인식 엔진 로딩이 너무 오래 걸려요. 인터넷 연결을 확인하고 새로고침 후 다시 시도해주세요.'
+  );
+  if(!worker){
+    document.getElementById('stepGridCalib').style.display = 'none';
+    return;
+  }
+  await worker.setParameters({
+    tessedit_pageseg_mode: '8', // 한 칸에 짧은 토큰 하나만 있다고 가정 (단어 단위)
+    tessedit_char_whitelist: '0123456789①②③④⑤⑥⑦⑧⑨',
+  });
+
+  for(let q = 1; q <= TOTAL; q++){
+    const group = Math.floor((q - 1) / perGroup);
+    const rowInGroup = (q - 1) % perGroup;
+    const cx = tap1.x + colVec.x * group + rowVec.x * rowInGroup;
+    const cy = tap1.y + colVec.y * group + rowVec.y * rowInGroup;
+
+    const cropX = Math.max(0, Math.round(cx - cellHalfW));
+    const cropY = Math.max(0, Math.round(cy - cellHalfH));
+    const cropW = Math.min(fullCanvas.width - cropX, Math.round(cellHalfW * 2));
+    const cropH = Math.min(fullCanvas.height - cropY, Math.round(cellHalfH * 2));
+    if(cropW <= 0 || cropH <= 0) continue;
+
+    const cellCanvas = document.createElement('canvas');
+    // 인식률을 위해 셀을 확대해서 넘김
+    const upscale = 5;
+    cellCanvas.width = cropW * upscale;
+    cellCanvas.height = cropH * upscale;
+    const cellCtx = cellCanvas.getContext('2d');
+    cellCtx.imageSmoothingEnabled = false;
+    cellCtx.drawImage(fullCanvas, cropX, cropY, cropW, cropH, 0, 0, cellCanvas.width, cellCanvas.height);
+
+    statusEl.textContent = `칸별 인식 중... (${q}/${TOTAL})`;
+    try{
+      const { data: { text } } = await worker.recognize(cellCanvas.toDataURL('image/png'));
+      const cleaned = normalizeOcrText(text.replace(/\s/g, ''));
+      const m = cleaned.match(/[①②③④⑤⑥⑦⑧⑨]|\d{1,3}/);
+      if(m) recognizedKey[q] = normalizeAnswerChar(m[0]);
+    }catch(e){
+      console.warn(`${q}번 칸 인식 실패`, e);
+    }
+  }
+  await worker.terminate();
+
+  statusEl.textContent = '칸별 인식 완료. STEP 3에서 꼭 확인해주세요.';
+  document.getElementById('stepGridCalib').style.display = 'none';
+  buildKeyGrid();
+  buildMineGrid();
+  document.getElementById('stepKey').classList.remove('disabled');
+  document.getElementById('stepMine').classList.remove('disabled');
+  saveState();
+}
+
+function onPhotoSelected(event, type){
+  const file = event.target.files[0];
+  if(!file) return;
+
+  const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+  if(isPDF){
+    document.getElementById('photoPreview').classList.remove('show');
+    document.getElementById('rotateControls').style.display = 'none';
+    handlePDF(file);
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    const img = new Image();
+    img.onload = () => {
+      pendingPhotoImg = img;
+      pendingPhotoType = type;
+      pendingPhotoRotation = 0;
+      renderPendingPhoto();
+      document.getElementById('rotateControls').style.display = 'flex';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+/* 사진을 pendingPhotoRotation 각도로 돌려서 미리보기에 반영 (흑백 이진화는 더 이상 적용하지 않음 —
+   컬러/그레이 원본을 그대로 유지해야 서버 Vision OCR 인식률이 더 좋고, 이진화 과정에서 정보 손실로
+   인한 서버 인식 실패도 줄어듦. 로컬 Tesseract 인식(runOCR)에서는 필요 시 자체적으로 이진화함) */
+function renderPendingPhoto(){
+  const img = pendingPhotoImg;
+  const scale = 2; // 화질 향상을 위한 2배 스케일링
+  const rot = pendingPhotoRotation;
+  const swapped = (rot === 90 || rot === 270);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = (swapped ? img.height : img.width) * scale;
+  canvas.height = (swapped ? img.width : img.height) * scale;
+  const ctx = canvas.getContext('2d');
+
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate(rot * Math.PI / 180);
+  ctx.drawImage(img, -img.width*scale/2, -img.height*scale/2, img.width*scale, img.height*scale);
+  ctx.restore();
+
+  pendingPhotoDataUrl = canvas.toDataURL('image/png');
+  const preview = document.getElementById('photoPreview');
+  preview.src = pendingPhotoDataUrl;
+  preview.classList.add('show');
+}
+
+function rotatePendingPhoto(){
+  pendingPhotoRotation = (pendingPhotoRotation + 90) % 360;
+  renderPendingPhoto();
+}
+
+function confirmPendingPhoto(){
+  document.getElementById('rotateControls').style.display = 'none';
+  if(pendingPhotoType === 'vision'){
+    if(!isVisionConfigured()){
+      document.getElementById('ocrStatus').classList.add('show');
+      document.getElementById('ocrStatus').textContent = '서버 OCR이 아직 설정 안 됐어요 (VISION_PROXY_URL 확인 필요).';
+      return;
+    }
+    recognizeViaVision(pendingPhotoDataUrl);
+    return;
+  }
+  runOCR(pendingPhotoDataUrl, pendingPhotoType);
+}
+
+function reconstructReadingOrder(items){
+  const rowTolerance = 4;
+  const withPos = items
+    .filter(it => it.str && it.str.trim() !== '')
+    .map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5], width: it.width || 0 }));
+
+  const rows = [];
+  withPos.forEach(item=>{
+    let row = rows.find(r => Math.abs(r.y - item.y) < rowTolerance);
+    if(!row){ row = { y: item.y, items: [] }; rows.push(row); }
+    row.items.push(item);
+  });
+
+  rows.sort((a,b) => b.y - a.y);
+  rows.forEach(row => row.items.sort((a,b) => a.x - b.x));
+
+  return rows.map(row=>{
+    let line = '';
+    let prevEndX = null;
+    row.items.forEach(item=>{
+      if(prevEndX !== null){
+        const gap = item.x - prevEndX;
+        const avgCharWidth = (item.width && item.str.length) ? item.width / item.str.length : 5;
+        // 글자 폭 대비 간격이 충분히 벌어져 있을 때만 띄어쓰기 삽입, 붙어있으면(예: "2""5""3") 그대로 이어붙임
+        if(gap > avgCharWidth * 0.6){
+          line += ' ';
+        }
+      }
+      line += item.str;
+      prevEndX = item.x + (item.width || 0);
+    });
+    return line;
+  }).join('\n');
+}
+
+async function handlePDF(file){
+  const statusEl = document.getElementById('ocrStatus');
+  const progressWrap = document.getElementById('progressWrap');
+  const progressBar = document.getElementById('progressBar');
+  statusEl.classList.add('show');
+  progressWrap.classList.add('show');
+  progressBar.style.width = '0%';
+
+  if(typeof pdfjsLib === 'undefined'){
+    statusEl.textContent = 'PDF 처리 라이브러리를 못 불러왔어요.';
+    return;
+  }
+  statusEl.textContent = 'PDF 여는 중...';
+
+  try{
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    let combinedText = '';
+    for(let p = 1; p <= pdf.numPages; p++){
+      statusEl.textContent = `PDF 텍스트 확인 중... (${p}/${pdf.numPages}페이지)`;
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      const pageText = reconstructReadingOrder(content.items);
+      combinedText += pageText + '\n';
+    }
+
+    if(combinedText.replace(/\s/g, '').length > 20){
+      statusEl.textContent = 'PDF 텍스트 인식 완료.';
+      finishTextExtraction(combinedText, 'pdf');
+      return;
+    }
+
+    statusEl.textContent = '텍스트 없는 PDF라 이미지로 변환해서 인식할게요...';
+    let ocrText = '';
+    for(let p = 1; p <= pdf.numPages; p++){
+      const page = await pdf.getPage(p);
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const pageCtx = canvas.getContext('2d');
+      await page.render({ canvasContext: pageCtx, viewport }).promise;
+      binarizeCanvas(pageCtx, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/png');
+
+      if(p === 1){
+        document.getElementById('photoPreview').src = dataUrl;
+        document.getElementById('photoPreview').classList.add('show');
+      }
+      statusEl.textContent = `이미지 인식 중... (${p}/${pdf.numPages}페이지)`;
+      const worker = await Tesseract.createWorker('eng');
+      await worker.setParameters({
+        tessedit_pageseg_mode: '11', // 흩어진 텍스트(표/격자) 전용 모드
+        tessedit_char_whitelist: '0123456789.()-: ①②③④⑤⑥⑦⑧⑨',
+      });
+      const { data: { text } } = await worker.recognize(dataUrl);
+      await worker.terminate();
+      ocrText += text + '\n';
+    }
+    statusEl.textContent = 'PDF 이미지 인식 완료.';
+    finishTextExtraction(ocrText, 'pdf');
+  }catch(err){
+    statusEl.textContent = 'PDF 처리 실패. 사진으로 다시 시도해주세요.';
+  }
+}
+
+function finishTextExtraction(text, type){
+  const electiveName = getSelectedElectiveName();
+  const statusEl = document.getElementById('ocrStatus');
+
+  if(type === 'pdf') {
+    const scoped = scopeTextToElective(text, electiveName);
+    parseAnswerKeyText(text, false);
+    if(electiveName && scoped){
+      statusEl.textContent += ` "${electiveName}" 구간으로 선택과목 문항을 맞춰 덮어썼어요.`;
+      parseAnswerKeyText(scoped, true);
+    } else if(electiveName && !scoped){
+      statusEl.textContent += ` "${electiveName}" 표기를 못 찾아 전체 인식 결과 그대로 썼어요.`;
+    }
+  }
+
+  buildKeyGrid();
+  buildMineGrid();
+  document.getElementById('stepKey').classList.remove('disabled');
+  document.getElementById('stepMine').classList.remove('disabled');
+  saveState();
+}
+
+async function runOCR(imageDataUrl, type){
+  const statusEl = document.getElementById('ocrStatus');
+  const progressWrap = document.getElementById('progressWrap');
+  const progressBar = document.getElementById('progressBar');
+  statusEl.classList.add('show');
+  progressWrap.classList.add('show');
+  statusEl.textContent = '인식 준비 중...';
+
+  try{
+    const worker = await Tesseract.createWorker('eng', 1, {
+      logger: (m)=>{
+        if(m.status === 'recognizing text'){
+          const pct = Math.round(m.progress * 100);
+          statusEl.textContent = `인식 중... ${pct}%`;
+          progressBar.style.width = pct + '%';
+        } else {
+          statusEl.textContent = m.status;
+        }
+      }
+    });
+    
+    // PSM 6 설정: 균일한 텍스트 블록(표 형태) 인식에 매우 뛰어남
+    await worker.setParameters({
+      tessedit_pageseg_mode: '11',
+      tessedit_char_whitelist: '0123456789.()-: ①②③④⑤⑥⑦⑧⑨',
+    });
+
+    // 로컬 Tesseract 엔진용으로만 이진화한 사본을 별도로 만들어 사용 (원본 미리보기는 유지)
+    const binarizedDataUrl = await binarizeDataUrl(imageDataUrl);
+    const { data: { text } } = await worker.recognize(binarizedDataUrl);
+    await worker.terminate();
+
+    const isElective = (type === 'elective');
+    parseAnswerKeyText(text, isElective);
+    
+    if (isElective) {
+      statusEl.textContent = '선택과목 영역을 덮어썼습니다. 표를 확인해주세요.';
+    } else {
+      statusEl.textContent = '공통과목(전체) 인식 완료. 아래에서 확인해주세요.';
+    }
+
+    buildKeyGrid();
+    buildMineGrid();
+    document.getElementById('stepKey').classList.remove('disabled');
+    document.getElementById('stepMine').classList.remove('disabled');
+    saveState();
+  } catch(err) {
+    statusEl.textContent = '인식 실패. 정답을 직접 입력해주세요.';
+    buildKeyGrid();
+    buildMineGrid();
+    document.getElementById('stepKey').classList.remove('disabled');
+    document.getElementById('stepMine').classList.remove('disabled');
+  }
+}
+
+const CIRCLED_MAP = { '①':'1','②':'2','③':'3','④':'4','⑤':'5','⑥':'6','⑦':'7','⑧':'8','⑨':'9' };
+function normalizeAnswerChar(ch){ return CIRCLED_MAP[ch] || ch; }
+
+/* OCR이 표준 원문자(①~⑤) 대신 뱉는 온갖 변형 표기를 표준형으로 통일.
+   괄호형 ⑴, 흑색 원 ❶, 이중 원 ⓵, 화살표류 ➀➊, 전각 숫자 １２３, "(3)" 텍스트 형태까지.
+   모든 인식 경로(사진/PDF/서버/격자)가 파싱 전에 이 함수를 거침. */
+const CIRCLED_VARIANTS = {
+  '①': ['⑴','❶','⓵','➀','➊'],
+  '②': ['⑵','❷','⓶','➁','➋'],
+  '③': ['⑶','❸','⓷','➂','➌'],
+  '④': ['⑷','❹','⓸','➃','➍'],
+  '⑤': ['⑸','❺','⓹','➄','➎'],
+};
+function normalizeOcrText(text){
+  // 전각 숫자 → 반각 숫자
+  text = text.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 0x30));
+  // ⒈⒉⒊ 같은 "숫자+마침표" 문자는 문항 번호 표기 → "1." 형태로 풀어줌
+  text = text.replace(/[⒈-⒐]/g, c => (c.charCodeAt(0) - 0x2488 + 1) + '.');
+  // 원문자 변형 → 표준 원문자
+  Object.keys(CIRCLED_VARIANTS).forEach(std=>{
+    CIRCLED_VARIANTS[std].forEach(v=>{ text = text.split(v).join(std); });
+  });
+  // "(3)" 같은 괄호 표기 → ③
+  text = text.replace(/\(\s*([1-5])\s*\)/g, (_, d) => '①②③④⑤'[parseInt(d)-1]);
+  return text;
+}
+
+let lastRawText = '';
+
+function isSubjective(qnum, total) {
+  // 수학 영역 공통 22문항 기준 확인된 주관식 번호: 19~22번
+  if (total === 22) {
+    if (qnum >= 19 && qnum <= 22) return true;
+  }
+  if (total === 30) {
+    /* 수능 수학 30문항 기준 단답형: 공통 16~22번, 선택 29~30번 (28번은 5지선다) */
+    if (qnum >= 16 && qnum <= 22) return true;
+    if (qnum >= 29 && qnum <= 30) return true;
+  }
+  return false;
+}
+
+/* 객관식 정답으로 받아들일 수 있는 값인지 판단.
+   동그라미 번호(①~⑤)가 정석이지만, 서버(Google Vision) OCR은 원문자를
+   일반 숫자로 읽는 경우가 많아서 1~5 사이 한 자리 숫자도 허용.
+   (그 외 숫자는 배점/페이지번호 등의 오인식으로 간주하고 버림) */
+function isAcceptableObjectiveAnswer(rawAns){
+  return /[①②③④⑤]/.test(rawAns) || /^[1-5]$/.test(rawAns);
+}
+
+/* 실제 OCR 결과는 "번호"와 "정답"이 같은 줄에 나란히 있지 않고,
+   한 줄에 토큰이 하나씩만 찍히는 경우가 많다 (세로로 쭉 나열된 형태).
+   그래서 "같은 줄에 있는 토큰끼리 묶기"가 아니라, 줄바꿈을 무시하고 전체 텍스트를
+   하나의 토큰 스트림으로 펼친 뒤, "문항 번호는 1씩 증가한다"는 사실을 기준점 삼아
+   순서대로 훑어나가는 방식으로 정답을 찾는다.
+
+   이 과정에서 애매한 경우가 하나 있다: 어떤 문항의 "정답으로 보이는 다음 토큰"이
+   공교롭게 바로 다음 문항 번호와 숫자가 같을 때 (예: 3번 다음에 "4"가 오는 경우,
+   이게 3번의 정답 "4"인지, 아니면 3번 정답이 인식 자체가 안 돼서 사실 "4"가
+   4번 문항의 번호인지 알 수 없음). 이럴 땐 한 걸음 더 앞을 미리 살펴봐서
+   ("4"를 4번 번호로 봤을 때 그 다음이 4번 정답 → 5번 번호로 자연스럽게 이어지는지)
+   더 그럴듯한 해석을 채택한다. 이어지지 않으면 이번 문항은 정답을 못 찾은 것으로
+   비워두고, 사용자가 STEP 3에서 직접 입력하도록 남겨둔다 — 사진에 정답 자체가
+   OCR로 인식되지 않은 경우이므로 텍스트만으로는 복구할 수 없기 때문. */
+function isValidAnswerFor(qnum, ans){
+  if(ans === undefined) return false;
+  return isSubjective(qnum, TOTAL) ? /^\d{1,3}$/.test(ans) : isAcceptableObjectiveAnswer(ans);
+}
+
+function parseSequentialAnswers(text, tempResult, tempPoints){
+  // "1회", "2교시"처럼 숫자 뒤에 한글이 바로 붙어있는 건 문항 번호가 아니라
+  // 제목/머리말 표기이므로 제외 (안 그러면 시작 지점을 잘못 잡아 전체가 밀림)
+  const tokens = text.match(/[①②③④⑤⑥⑦⑧⑨]|\d{1,3}(?![가-힣])/g);
+  if(!tokens) return;
+
+  // 시작 문항 번호를 1로 고정하지 않고, 텍스트에 등장하는 첫 숫자 토큰에서 추론.
+  // (선택과목 영역만 잘라 넘기는 overlay 호출은 23번처럼 1이 아닌 번호부터 시작하므로)
+  const startIdx = tokens.findIndex(t => /^\d{1,2}$/.test(t) && parseInt(t) >= 1 && parseInt(t) <= TOTAL);
+  if(startIdx === -1) return;
+
+  let expected = parseInt(tokens[startIdx]);
+  let i = startIdx;
+  while(i < tokens.length && expected <= TOTAL){
+    const tk = tokens[i];
+    if(!(/^\d{1,2}$/.test(tk) && parseInt(tk) === expected)){
+      i++;
+      continue;
+    }
+
+    const ans = tokens[i+1];
+
+    // 다음 정답 후보가 바로 다음 문항 번호와 숫자가 같은 애매한 경우 → 한 걸음 더 확인
+    if(ans !== undefined && /^\d{1,2}$/.test(ans) && parseInt(ans) === expected + 1){
+      const lookAns = tokens[i+2];
+      const afterLook = tokens[i+3];
+      const looksLikeNextPair =
+        isValidAnswerFor(expected + 1, lookAns) &&
+        afterLook !== undefined && /^\d{1,2}$/.test(afterLook) && parseInt(afterLook) === expected + 2;
+
+      if(looksLikeNextPair){
+        // 이번 문항(expected)의 정답은 OCR에서 누락된 것으로 판단, 비워두고 다음 문항으로
+        expected++;
+        i++;
+        continue;
+      }
+      // 그렇지 않다면 그냥 아래 일반 로직대로 ans를 이번 문항의 정답으로 채택
+    }
+
+    if(isValidAnswerFor(expected, ans)){
+      if(tempResult[expected] === undefined) tempResult[expected] = normalizeAnswerChar(ans);
+
+      // 정답 다음 토큰이 배점(2/3/4)일 수 있음 — 단, 그 값이 다음 문항 번호와 같으면
+      // 배점이 아니라 그냥 다음 문항 번호이므로 배점으로 오인하지 않는다.
+      const maybeScore = tokens[i+2];
+      if(maybeScore !== undefined && /^[234]$/.test(maybeScore) && parseInt(maybeScore) !== expected + 1){
+        tempPoints[expected] = parseInt(maybeScore);
+        i += 3;
+      } else {
+        i += 2;
+      }
+      expected++;
+    } else {
+      // 번호는 찾았지만 이어지는 토큰이 정답 형식이 아님 → 이 문항은 건너뜀
+      expected++;
+      i++;
+    }
+  }
+}
+
+function parseAnswerKeyText(text, isOverlay){
+  text = normalizeOcrText(text);
+  if(!isOverlay){
+    recognizedKey = {};
+    recognizedPoints = {};
+    lastRawText = text;
+  } else {
+    lastRawText += '\n\n---[선택과목 추가 인식]---\n' + text;
+  }
+
+  const tempResult = {};
+  const tempPoints = {};
+
+  // 0순위: 줄바꿈에 상관없이 전체 텍스트를 하나의 토큰 스트림으로 보고,
+  // "문항 번호는 1씩 증가한다"는 사실을 기준점 삼아 순서대로 정답을 찾는다.
+  // (번호와 정답이 한 줄에 나란히 있지 않고 한 줄에 하나씩 세로로 찍히는
+  //  실제 OCR 결과에서도 정상 동작하도록 함 — 이전 줄 단위 방식의 한계 보완)
+  parseSequentialAnswers(text, tempResult, tempPoints);
+
+  // 1순위: 기존 strict 포맷 (번호. 정답)
+  let m;
+  const strict = /(?:\b|^)(\d{1,2})\s*[.\)\-:]\s*([①②③④⑤]|\d{1,3})(?!\d)/g;
+  while((m = strict.exec(text)) !== null){
+    const qnum = parseInt(m[1]);
+    if(qnum < 1 || qnum > 50) continue;
+
+    const rawAns = m[2];
+    if (!isSubjective(qnum, TOTAL) && !isAcceptableObjectiveAnswer(rawAns)) continue;
+
+    if(!tempResult[qnum]) tempResult[qnum] = normalizeAnswerChar(rawAns);
+  }
+
+  // 2순위: 기존 loose 포맷
+  if(Object.keys(tempResult).length < TOTAL / 3){
+    const loose = /(?:\b|^)(\d{1,2})\s+([①②③④⑤]|\d{1,3})(?!\d)/g;
+    while((m = loose.exec(text)) !== null){
+      const qnum = parseInt(m[1]);
+      if(qnum < 1 || qnum > 50) continue;
+      
+      const rawAns = m[2];
+      const isCircle = /[①②③④⑤]/.test(rawAns);
+      /* loose 포맷은 "숫자 숫자"만으로 매칭돼 문맥이 약함 — 여기까지 일반 숫자(1~5)를
+         허용하면 "16 12 3" 같은 행에서 12번→3 같은 유령 정답이 생기므로 원문자만 허용 */
+      if (!isSubjective(qnum, TOTAL) && !isCircle) continue;
+
+      if(!tempResult[qnum]) tempResult[qnum] = normalizeAnswerChar(rawAns);
+    }
+  }
+
+  // 병합
+  Object.keys(tempResult).forEach(k=>{
+    recognizedKey[k] = tempResult[k];
+    if(tempPoints[k]) recognizedPoints[k] = tempPoints[k];
+  });
+}
+
+function buildKeyGrid(){
+  const grid = document.getElementById('keyGrid');
+  grid.innerHTML = '';
+  document.getElementById('enableKeyEdit').checked = false;
+  document.getElementById('rawTextBox').value = lastRawText;
+  for(let i=1; i<=TOTAL; i++){
+    const cell = document.createElement('div');
+    cell.className = 'answer-cell key-cell';
+    cell.innerHTML = `
+      <span class="qnum">${i}</span>
+      <input type="text" maxlength="3" id="key_${i}" value="${recognizedKey[i] || ''}" disabled>
+    `;
+    grid.appendChild(cell);
+  }
+}
+
+function toggleRawText(){
+  document.getElementById('rawTextBox').style.display =
+    document.getElementById('showRawText').checked ? 'block' : 'none';
+}
+
+function toggleKeyEdit(){
+  const enabled = document.getElementById('enableKeyEdit').checked;
+  for(let i=1; i<=TOTAL; i++){
+    const el = document.getElementById(`key_${i}`);
+    if(el) el.disabled = !enabled;
+  }
+}
+
+function buildMineGrid(){
+  const grid = document.getElementById('mineGrid');
+  grid.innerHTML = '';
+  for(let i=1; i<=TOTAL; i++){
+    const cell = document.createElement('div');
+    cell.className = 'answer-cell';
+    cell.innerHTML = `
+      <span class="qnum">${i}</span>
+      <input type="text" maxlength="3" id="mine_${i}">
+    `;
+    grid.appendChild(cell);
+  }
+}
+
+/* 답 비교 전 정규화: 원문자를 숫자로("③" == "3"), 앞뒤 공백 제거,
+   주관식 답의 앞자리 0 제거("07" == "7") — 어느 쪽에 어떤 표기로 적어도 같은 답이면 정답 처리 */
+function normalizeForGrade(v){
+  let s = normalizeOcrText((v || '').trim());
+  s = s.replace(/[①②③④⑤⑥⑦⑧⑨]/g, c => CIRCLED_MAP[c]);
+  if(/^\d+$/.test(s)) return String(parseInt(s, 10));
+  return s;
+}
+
+function gradeNow(){
+  let correct = 0;
+  const wrongNums = [];
+  const ungradedNums = []; // 정답 칸이 비어 있어 채점에서 제외한 문항
+  let earnedPoints = 0, totalPoints = 0, pointsKnown = 0, gradedCount = 0;
+  const resultGrid = document.getElementById('resultGrid');
+  resultGrid.innerHTML = '';
+
+  for(let i=1; i<=TOTAL; i++){
+    const keyVal = normalizeForGrade(document.getElementById(`key_${i}`).value);
+    const mineVal = normalizeForGrade(document.getElementById(`mine_${i}`).value);
+
+    const cell = document.createElement('div');
+    let cls, mark;
+    if(keyVal === ''){
+      ungradedNums.push(i);
+      cls = 'ungraded'; mark = '−';
+    } else {
+      gradedCount++;
+      const isCorrect = keyVal === mineVal;
+      const pts = recognizedPoints[i];
+      if(pts){ totalPoints += pts; pointsKnown++; if(isCorrect) earnedPoints += pts; }
+      if(isCorrect){ correct++; cls = 'correct'; mark = 'O'; }
+      else { wrongNums.push(i); cls = 'wrong'; mark = 'X'; }
+    }
+    cell.className = 'result-cell ' + cls;
+    cell.innerHTML = `
+      <span class="qnum">${i}</span>
+      <div class="mark-box">${mark}</div>
+    `;
+    resultGrid.appendChild(cell);
+  }
+
+  document.getElementById('resultScore').innerHTML = `${correct}<span> / ${gradedCount}</span>`;
+
+  // 배점을 전부 아는 경우에만 원점수 표시 (일부만 알면 오해의 소지가 있어 표시 안 함)
+  let sub = `틀린 문항 ${wrongNums.length}개`;
+  if(gradedCount > 0 && pointsKnown === gradedCount){
+    sub = `원점수 ${earnedPoints}점 / ${totalPoints}점 만점 · ` + sub;
+  }
+  if(ungradedNums.length){
+    sub += ` · 미채점 ${ungradedNums.length}개 (정답 칸 비어 있음)`;
+  }
+  document.getElementById('resultSub').textContent = sub;
+
+  const lines = [];
+  if(wrongNums.length){
+    const detail = wrongNums.map(n=>{
+      const k = normalizeForGrade(document.getElementById(`key_${n}`).value);
+      const mine = normalizeForGrade(document.getElementById(`mine_${n}`).value);
+      return `${n}번(정답 ${k}, 내 답 ${mine || '무응답'})`;
+    });
+    lines.push(`틀린 문항: ${detail.join(', ')}`);
+  } else if(gradedCount > 0){
+    lines.push('전부 맞았습니다.');
+  }
+  if(ungradedNums.length){
+    lines.push(`미채점: ${ungradedNums.join(', ')}번 — STEP 3에서 정답을 채워주세요.`);
+  }
+  document.getElementById('wrongList').textContent = lines.join('\n');
+
+  document.getElementById('resultBox').classList.add('show');
+  document.getElementById('resultBox').scrollIntoView({ behavior:'smooth' });
+  saveState();
+}
+
+/* ---------------- 상태 저장/복원 (새로고침해도 유지) ---------------- */
+const STORAGE_KEY = 'quickgrade_state_v1';
+
+function collectAnswersFromGrid(prefix){
+  const out = {};
+  for(let i=1; i<=TOTAL; i++){
+    const el = document.getElementById(`${prefix}_${i}`);
+    if(el && el.value.trim()) out[i] = el.value.trim();
+  }
+  return out;
+}
+
+function saveState(){
+  try{
+    const hasKeyGrid = document.getElementById('keyGrid').children.length > 0;
+    const state = {
+      total: TOTAL,
+      elective: document.getElementById('electiveSelect').value,
+      customElective: document.getElementById('customElectiveInput').value,
+      // 사용자가 STEP 3에서 직접 고친 값까지 반영하려고 DOM에서 읽음
+      key: hasKeyGrid ? collectAnswersFromGrid('key') : recognizedKey,
+      points: recognizedPoints,
+      mine: collectAnswersFromGrid('mine'),
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }catch(e){ /* 사생활 보호 모드 등에서 localStorage 실패해도 앱은 계속 동작 */ }
+}
+
+let saveTimer = null;
+function scheduleSave(){ clearTimeout(saveTimer); saveTimer = setTimeout(saveState, 400); }
+document.addEventListener('input', (e)=>{
+  if(e.target && /^(key|mine)_\d+$/.test(e.target.id || '')) scheduleSave();
+});
+
+function clearSavedState(){
+  try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
+  const banner = document.getElementById('restoreBanner');
+  if(banner) banner.remove();
+}
+
+function applyRestoredState(st){
+  TOTAL = st.total;
+  document.getElementById('electiveSelect').value = st.elective || '';
+  onElectiveChange();
+  if(st.elective === '__custom__') document.getElementById('customElectiveInput').value = st.customElective || '';
+  if(!st.elective || st.elective === '__custom__') document.getElementById('totalCount').value = st.total;
+
+  recognizedKey = st.key || {};
+  recognizedPoints = st.points || {};
+  lastRawText = '(저장해둔 상태에서 복원됨)';
+
+  document.getElementById('stepElective').classList.add('disabled');
+  document.getElementById('stepPhoto').classList.remove('disabled');
+  buildKeyGrid();
+  buildMineGrid();
+  Object.keys(st.mine || {}).forEach(q=>{
+    const el = document.getElementById(`mine_${q}`);
+    if(el) el.value = st.mine[q];
+  });
+  document.getElementById('stepKey').classList.remove('disabled');
+  document.getElementById('stepMine').classList.remove('disabled');
+
+  const banner = document.getElementById('restoreBanner');
+  if(banner) banner.remove();
+}
+
+(function offerRestore(){
+  let st = null;
+  try{ st = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); }catch(e){}
+  if(!st || !st.total) return;
+  const hasData = Object.keys(st.key || {}).length || Object.keys(st.mine || {}).length;
+  if(!hasData) return;
+
+  const banner = document.createElement('div');
+  banner.id = 'restoreBanner';
+  banner.style.cssText = 'border:1.5px dashed var(--red-deep); background:var(--paper-dark); padding:10px 12px; margin-bottom:14px; font-size:13px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;';
+
+  const label = document.createElement('span');
+  label.style.cssText = 'flex:1; min-width:150px;';
+  const when = st.savedAt ? new Date(st.savedAt).toLocaleString('ko-KR') : '';
+  label.textContent = `이전에 하던 채점이 있어요${when ? ` (${when} 저장)` : ''}.`;
+
+  const btnGo = document.createElement('button');
+  btnGo.textContent = '이어서 하기';
+  btnGo.style.cssText = 'font-family:inherit; font-weight:700; font-size:13px; background:var(--ink); color:var(--paper); border:none; padding:8px 12px; cursor:pointer;';
+  btnGo.onclick = ()=> applyRestoredState(st);
+
+  const btnClear = document.createElement('button');
+  btnClear.textContent = '지우기';
+  btnClear.style.cssText = 'font-family:inherit; font-size:13px; background:transparent; color:var(--ink-soft); border:1px solid var(--line); padding:8px 12px; cursor:pointer;';
+  btnClear.onclick = clearSavedState;
+
+  banner.appendChild(label);
+  banner.appendChild(btnGo);
+  banner.appendChild(btnClear);
+  document.querySelector('main').prepend(banner);
+})();
+
+onElectiveChange();
+</script>
+</body>
+</html>
