@@ -426,7 +426,7 @@
       <li><span class="tip-icon">☀️</span><span>그림자가 지지 않게, 밝은 곳에서 찍어주세요.</span></li>
       <li><span class="tip-icon">🖼️</span><span>정답지 전체가 잘리지 않게 프레임 안에 다 들어오게 찍어주세요.</span></li>
       <li><span class="tip-icon">📐</span><span>최대한 반듯하게(비스듬하지 않게) 찍으면 인식률이 올라가요.</span></li>
-      <li><span class="tip-icon">🔍</span><span>흐릿하지 않도록 초점을 맞추고, 손 떨림 없이 찍어주세요.</span></li>
+      <li><span class="tip-icon">🔍</span><span>흐릿하지 않도록 초점을 맞추고, 손 떨림 없이 찍어주세요.(인식이 안되면 다시 찍어주세요)</span></li>
       <li><span class="tip-icon">📄</span><span>국어·수학처럼 선택과목이 있는 과목은 공통과목을 먼저 인식해야 선택과목 인식이 가능해요.</span></li>
     </ul>
 
@@ -652,7 +652,7 @@
         <div class="photo-group-title">공통과목</div>
         <div class="photo-input-wrap">
           <input type="file" accept="application/pdf" id="photoInputCommon" style="display:none" onchange="onPhotoSelected(event, 'common')">
-          <button class="photo-btn" onclick="document.getElementById('photoInputCommon').click()">📄 PDF 올리기</button>
+          <button class="photo-btn" onclick="document.getElementById('photoInputCommon').click()">📄 PDF 올리기(준비중)</button>
 
           <input type="file" accept="image/*" id="photoInputVisionCommon" style="display:none" onchange="onPhotoSelected(event, 'vision-common')">
           <button class="photo-btn secondary" onclick="document.getElementById('photoInputVisionCommon').click()">☁️ 공통 정답지 서버(Google Vision)로 인식하기</button>
